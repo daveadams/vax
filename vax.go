@@ -23,6 +23,9 @@ type VaultProvider struct {
 	VaultClient *vault.Client
 
 	expiresAt time.Time
+
+	// compose with credentials.Expiry to get free IsExpired()
+	credentials.Expiry
 }
 
 // Creates a new VaultProvider. Supply the path where the AWS secrets engine
@@ -36,8 +39,14 @@ func NewVaultProvider(enginePath string, roleName string) *VaultProvider {
 		StsCredsPath: (enginePath + "/sts/" + roleName),
 		TTL:          "30m",
 		VaultClient:  client,
-		expiresAt:    time.Now(),
 	}
+}
+
+// An extra shortcut to avoid needing to import credentials into your source
+// file or call nested functions. Call this to return a new Credentials object
+// using the VaultProvider.
+func NewVaultProviderCredentials(enginePath string, roleName string) *credentials.Credentials {
+	return credentials.NewCredentials(NewVaultProvider(enginePath, roleName))
 }
 
 // Implements the Retrieve() function for the AWS SDK credentials.Provider
@@ -55,18 +64,12 @@ func (vp *VaultProvider) Retrieve() (credentials.Value, error) {
 		return rv, err
 	}
 
-	vp.expiresAt = time.Now().Add(time.Duration(resp.LeaseDuration) * time.Second)
+	// set expiration time via credentials.Expiry with a 10 second window
+	vp.SetExpiration(time.Now().Add(time.Duration(resp.LeaseDuration)*time.Second), time.Duration(10*time.Second))
 
 	rv.AccessKeyID = resp.Data["access_key"].(string)
 	rv.SecretAccessKey = resp.Data["secret_key"].(string)
 	rv.SessionToken = resp.Data["security_token"].(string)
 
 	return rv, nil
-}
-
-// Implements the IsExpired() function for the AWS SDK credentials.Provider
-// interface.
-func (vp *VaultProvider) IsExpired() bool {
-	// report expiration 10 seconds before the actual expiration time
-	return time.Now().After(vp.expiresAt.Add(-10 * time.Second))
 }

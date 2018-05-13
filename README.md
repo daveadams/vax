@@ -31,9 +31,7 @@ in an AWS secrets engine mounted at `aws`, and that you have set the env vars
 
     func main() {
         stsSvc := sts.New(session.Must(session.NewSession()), &aws.Config{
-    	    Credentials: credentials.NewCredentials(
-                vax.NewVaultProvider(SecretsEngineMount, EngineRoleName),
-            ),
+            Credentials: vax.NewVaultProviderCredentials(SecretsEngineMount, EngineRoleName),
         })
 
         resp, err := stsSvc.GetCallerIdentity(&sts.GetCallerIdentityInput{})
